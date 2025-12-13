@@ -1,13 +1,13 @@
 "use client";
 
-import { useRef, useState } from 'react';
-import { BarcodeScanner } from 'react-barcode-scanner';
-import "react-barcode-scanner/polyfill";
+import { useRef, useState, ChangeEvent } from 'react';
+import { BrowserMultiFormatReader, NotFoundException } from '@zxing/library';
 
 export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [scannedBarcodes, setScannedBarcodes] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const handlePlusButtonClick = () => {
     if (fileInputRef.current) {
@@ -15,16 +15,31 @@ export default function Home() {
     }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       setSelectedImage(file);
-    }
-  };
+      setError(null);
 
-  const handleScan = (data: string | null) => {
-    if (data && !scannedBarcodes.includes(data)) {
-      setScannedBarcodes((prevBarcodes) => [...prevBarcodes, data]);
+      const reader = new BrowserMultiFormatReader();
+      const imageUrl = URL.createObjectURL(file);
+
+      try {
+        const result = await reader.decodeFromImageUrl(imageUrl);
+        const barcode = result.getText();
+        if (!scannedBarcodes.includes(barcode)) {
+          setScannedBarcodes((prevBarcodes) => [...prevBarcodes, barcode]);
+        }
+      } catch (err) {
+        if (err instanceof NotFoundException) {
+          setError("No barcode found in the selected image.");
+        } else {
+          setError("An error occurred while scanning the barcode.");
+        }
+        console.error("Barcode scanning failed:", err);
+      } finally {
+        URL.revokeObjectURL(imageUrl);
+      }
     }
   };
 
@@ -49,10 +64,13 @@ export default function Home() {
       {selectedImage && (
         <div className="mt-4">
           <p>Selected image: {selectedImage.name}</p>
-          <BarcodeScanner
-            onScan={handleScan}
-            src={URL.createObjectURL(selectedImage)}
-          />
+          <img src={URL.createObjectURL(selectedImage)} alt="Selected barcode" className="max-w-full h-auto mt-2" />
+        </div>
+      )}
+      {error && (
+        <div className="mt-4 p-4 bg-red-800 rounded">
+          <p className="font-bold">Error:</p>
+          <p>{error}</p>
         </div>
       )}
       {scannedBarcodes.length > 0 && (
